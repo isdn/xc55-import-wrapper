@@ -1,0 +1,10 @@
+[Unit]
+Description=Monitors the import directory
+
+[Path]
+PathExistsGlob=/var/www/htdocs/import/*.csv
+# PathChanged=/var/www/htdocs/import/
+Unit=xc55_import_wrapper_unit.service
+
+[Install]
+WantedBy=multi-user.target

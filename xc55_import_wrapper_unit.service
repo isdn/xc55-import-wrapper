@@ -1,0 +1,16 @@
+[Unit]
+Description=Executes import wrapper
+
+[Service]
+Type=oneshot
+User=xc
+Group=xc
+ReadOnlyPaths=/
+ReadWritePaths=/tmp /var/tmp /run /var/www/htdocs
+# EnvironmentFile=
+Environment="XC_STORE_PATH=/var/www/htdocs"
+Environment="IMPORT_PATH=/var/www/htdocs/import"
+ExecStart=/var/www/htdocs/xc55_import_wrapper.py
+
+[Install]
+WantedBy=multi-user.target
