@@ -8,6 +8,7 @@ from shutil import which
 from re import compile, Pattern
 from fileinput import input, FileInput
 from subprocess import run, Popen, CalledProcessError, STDOUT, PIPE, DEVNULL, TimeoutExpired, SubprocessError
+from threading import Event, Thread
 from time import sleep
 from datetime import datetime
 
@@ -41,6 +42,12 @@ class Config:
     verbose: bool = False
     report_to_file: PurePosixPath | None = None
     # report_to_email: bool = False
+
+
+@dataclass
+class ProcessManager:
+    stop: Event
+    ping_workers: Thread
 
 
 def init() -> Config:
@@ -111,6 +118,7 @@ class Task:
     config: Config
     workers_qty: int = 0
     workers: {int: Popen} = {}
+    process_manager: ProcessManager | None = None
     import_cmd: [str] = []
     report: [str] = []
 
@@ -128,6 +136,9 @@ class Task:
         self.import_cmd = [*self.config.import_cmd]
         if self.config.background_jobs:
             self.import_cmd.extend(['-w', 'true'])
+            self.process_manager = ProcessManager(
+                stop=Event(),
+                ping_workers=Thread(name='workers checker', daemon=True, target=self._ping_workers))
         self.import_cmd.append(self.file)
         self.status = TaskStatus.CREATED
         self.status_message = f"Task for file {self.file} has been created"
@@ -161,7 +172,18 @@ class Task:
     def get_report(self) -> str:
         return '\n'.join(self.report)
 
-    def _error(self, msg: str, unlock: bool = False) -> None:
+    def _ping_workers(self):
+        while not self.process_manager.stop.is_set():
+            pids = [*self.workers.keys()]
+            for pid in pids:
+                if self.workers[pid].poll() is not None:
+                    self.report.append(f"{datetime.now()}: Worker {pid} was terminated externally")
+                    del self.workers[pid]
+                    if (p := Path(f"{self.config.store_path}/var/workers/{pid}")).is_file():
+                        p.unlink()
+            self.process_manager.stop.wait(20)
+
+    def _error(self, msg: str, unlock: bool = False):
         self.status = TaskStatus.ERROR
         self.status_message = msg
         if unlock:
@@ -196,9 +218,14 @@ class Task:
         for _ in range(self.workers_qty):
             if (pid := self._start_worker()) is not None:
                 self.report.append(f"Worker {pid} started")
+        self.process_manager.stop.clear()
+        self.process_manager.ping_workers.start()
 
     def _stop_workers(self):
         pids = [*self.workers.keys()]
+        if self.process_manager is not None and self.process_manager.ping_workers.is_alive():
+            self.process_manager.stop.set()
+            self.process_manager.ping_workers.join(2)
         for pid in pids:
             self._stop_worker(pid)
             self.report.append(f"Worker {pid} stopped")
@@ -253,3 +280,4 @@ if __name__ == '__main__':
             import_task.start()
         report.append(import_task.get_report())
     do_report(cfg=config, rep=report)
+    exit(0)
