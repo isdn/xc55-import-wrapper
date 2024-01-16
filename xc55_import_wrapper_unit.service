@@ -1,5 +1,5 @@
 [Unit]
-Description=Executes import wrapper
+Description=XC55 Import wrapper
 
 [Service]
 Type=oneshot

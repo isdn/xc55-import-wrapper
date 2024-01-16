@@ -1,5 +1,5 @@
 [Unit]
-Description=Monitors the import directory
+Description=Checking the import directory
 
 [Path]
 PathExistsGlob=/var/www/htdocs/import/*.csv
